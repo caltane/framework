@@ -6,6 +6,10 @@
 		<WarningsAsErrors>nullable</WarningsAsErrors>
 	</PropertyGroup>
 
+	<PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
+	  <NoWarn>1701;1702;8600</NoWarn>
+	</PropertyGroup>
+
 	<ItemGroup>
 		<PackageReference Include="Npgsql" Version="5.0.3" />
 		<PackageReference Include="Signum.Analyzer" Version="2.7.0" />

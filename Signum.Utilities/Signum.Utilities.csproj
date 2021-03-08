@@ -6,6 +6,10 @@
     <WarningsAsErrors>nullable</WarningsAsErrors>
   </PropertyGroup>
 
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
+    <NoWarn>1701;1702;8600</NoWarn>
+  </PropertyGroup>
+
   <ItemGroup>
     <None Update="Translations\*.xml">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
