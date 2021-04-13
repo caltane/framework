@@ -6,6 +6,10 @@
 		<WarningsAsErrors>nullable</WarningsAsErrors>
 		<Platforms>x64;x86;AnyCPU</Platforms>
 	</PropertyGroup>
+	
+	<PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+	  <NoWarn>1701;1702;CS8600</NoWarn>
+	</PropertyGroup>
 
 	<ItemGroup>
 		<None Remove="Engine\Scripts\versioning_function.sql" />
