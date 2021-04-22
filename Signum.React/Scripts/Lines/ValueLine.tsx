@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { DateTime, Duration, DurationObjectUnits } from 'luxon'
-import { DateTimePicker, DatePicker } from 'react-widgets'
-import { CalendarProps } from 'react-widgets/lib/Calendar'
+import { DateTimePicker, DatePicker, DropdownList } from 'react-widgets'
+import { CalendarProps } from 'react-widgets/cjs/Calendar'
 import { Dic, addClass, classes } from '../Globals'
 import { MemberInfo, getTypeInfo, TypeReference, toLuxonFormat, toDurationFormat, toNumberFormat, isTypeEnum, durationToString, TypeInfo, parseDuration } from '../Reflection'
 import { LineBaseController, LineBaseProps, useController } from '../Lines/LineBase'
@@ -9,7 +9,6 @@ import { FormGroup } from '../Lines/FormGroup'
 import { FormControlReadonly } from '../Lines/FormControlReadonly'
 import { BooleanEnum, JavascriptMessage } from '../Signum.Entities'
 import TextArea from '../Components/TextArea';
-import 'react-widgets/dist/css/react-widgets.css';
 import { KeyCodes } from '../Components/Basic';
 import { format } from 'd3';
 import { isPrefix, QueryToken } from '../FindOptions'
@@ -22,6 +21,7 @@ export interface ValueLineProps extends LineBaseProps {
   autoFixString?: boolean;
   inlineCheckbox?: boolean | "block";
   comboBoxItems?: (OptionItem | MemberInfo | string)[];
+  onRenderComboBoxItem?: (oi: OptionItem) => React.ReactNode;
   valueHtmlAttributes?: React.AllHTMLAttributes<any>;
   extraButtons?: (vl: ValueLineController) => React.ReactNode;
   initiallyFocused?: boolean;
@@ -324,22 +324,45 @@ function internalComboBox(vl: ValueLineController) {
           val.toString();
   }
 
-  const handleEnumOnChange = (e: React.SyntheticEvent<any>) => {
-    const input = e.currentTarget as HTMLInputElement;
-    const option = optionItems.filter(a => toStr(a.value) == input.value).single();
-    vl.setValue(option.value);
-  };
+  if (vl.props.onRenderComboBoxItem) {
+    const handleOptionItem = (e: OptionItem) => {
+      vl.setValue(e.value);
+    };
 
-  return (
-    <FormGroup ctx={s.ctx} labelText={s.labelText} helpText={s.helpText} htmlAttributes={{ ...vl.baseHtmlAttributes(), ...s.formGroupHtmlAttributes }} labelHtmlAttributes={s.labelHtmlAttributes}>
-      {vl.withItemGroup(
-        <select {...vl.props.valueHtmlAttributes} value={toStr(s.ctx.value)} className={addClass(vl.props.valueHtmlAttributes, classes(s.ctx.formControlClass, vl.mandatoryClass))} onChange={handleEnumOnChange} >
-          {optionItems.map((oi, i) => <option key={i} value={toStr(oi.value)}>{oi.label}</option>)}
-        </select>)
-      }
-    </FormGroup>
-  );
+    var oi = optionItems.single(a => a.value == s.ctx.value);
 
+    return (
+      <FormGroup ctx={s.ctx} labelText={s.labelText} helpText={s.helpText} htmlAttributes={{ ...vl.baseHtmlAttributes(), ...s.formGroupHtmlAttributes }} labelHtmlAttributes={s.labelHtmlAttributes}>
+        {vl.withItemGroup(
+          <DropdownList className={addClass(vl.props.valueHtmlAttributes, classes(s.ctx.formControlClass, vl.mandatoryClass))} data={optionItems} onChange={handleOptionItem} value={oi}
+            filter={false}
+            autoComplete="off"
+            dataKey="value"
+            textField="label"
+            renderValue={a => vl.props.onRenderComboBoxItem!(a.item)}
+            renderListItem={a => vl.props.onRenderComboBoxItem!(a.item)}
+          />)
+        }
+      </FormGroup>
+    );
+  } else {
+
+    const handleEnumOnChange = (e: React.SyntheticEvent<any>) => {
+      const input = e.currentTarget as HTMLInputElement;
+      const option = optionItems.filter(a => toStr(a.value) == input.value).single();
+      vl.setValue(option.value);
+    };
+
+    return (
+      <FormGroup ctx={s.ctx} labelText={s.labelText} helpText={s.helpText} htmlAttributes={{ ...vl.baseHtmlAttributes(), ...s.formGroupHtmlAttributes }} labelHtmlAttributes={s.labelHtmlAttributes}>
+        {vl.withItemGroup(
+          <select {...vl.props.valueHtmlAttributes} value={toStr(s.ctx.value)} className={addClass(vl.props.valueHtmlAttributes, classes(s.ctx.formControlClass, vl.mandatoryClass))} onChange={handleEnumOnChange} >
+            {optionItems.map((oi, i) => <option key={i} value={toStr(oi.value)}>{oi.label}</option>)}
+          </select>)
+        }
+      </FormGroup>
+    );
+  }
 }
 
 ValueLineRenderers.renderers["TextBox" as ValueLineType] = (vl) => {
@@ -675,15 +698,23 @@ ValueLineRenderers.renderers["DateTime" as ValueLineType] = (vl) => {
             valueDisplayFormat={luxonFormat}
             includeTime={showTime}
             inputProps={htmlAttributes as any} placeholder={htmlAttributes.placeholder}
-            messages={{ dateButton: JavascriptMessage.Date.niceToString(), timeButton: JavascriptMessage.Time.niceToString() }}
+            messages={{ dateButton: JavascriptMessage.Date.niceToString() }}
             min={s.minDate}
             max={s.maxDate}
-            calendarProps={s.calendarProps}
+            calendarProps={{ renderDay: defaultRenderDay, ...s.calendarProps }}
           />
         </div>
       )}
     </FormGroup>
   );
+}
+
+function defaultRenderDay({ date, label }: { date: Date; label: string }) {
+  var dateStr = DateTime.fromJSDate(date).toISODate();
+
+  var today = dateStr == DateTime.local().toISODate();
+
+  return <span className={today? "sf-today" : undefined}>{label}</span>;
 }
 
 export function trimDateToFormat(date: DateTime, type: "Date" | "DateTime", format: string | undefined): DateTime {
@@ -752,7 +783,7 @@ export interface DurationTextBoxProps {
   validateKey: (e: React.KeyboardEvent<any>) => boolean;
   formControlClass?: string;
   format?: string;
-  htmlAttributes: React.HTMLAttributes<HTMLInputElement>;
+  htmlAttributes?: React.HTMLAttributes<HTMLInputElement>;
   innerRef?: React.RefObject<HTMLInputElement>;
 }
 
@@ -813,7 +844,7 @@ export function DurationTextBox(p: DurationTextBoxProps) {
 
 export function parseDurationRelaxed(timeStampOrHumanStr: string, format: string = "hh:mm:ss"): Duration | null {
   var valParts = timeStampOrHumanStr.split(":");
-  var formatParts = format.split(":");
+  var formatParts = format.split(":").map(p => p.length == 1 ? p + p : p); //"h -> hh"
   if (valParts.length == 1 && formatParts.length > 1) {
     const validFormats = Array.range(0, formatParts.length).map(i => Array.range(0, i + 1).map(j => formatParts[j]).join("")); //hh:mm:ss -> "" "hh" "hhmm" "hhmmss"
 

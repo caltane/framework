@@ -38,7 +38,7 @@ namespace Signum.Utilities.DataStructures
                 if (scope.map.TryGetValue(key, out value))
                     return true;
             }
-            value = default(TValue)!;
+            value = default!;
             return false;
         }
 
@@ -74,7 +74,7 @@ namespace Signum.Utilities.DataStructures
 
         public TValue GetOrCreate(TKey key, Func<TValue> valueFactory)
         {
-            if (!TryGetValue(key, out TValue result))
+            if (!TryGetValue(key, out TValue? result))
             {
                 result = valueFactory();
                 Add(key, result);
