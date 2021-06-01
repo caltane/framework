@@ -21,7 +21,7 @@ import { TypeEntity, QueryEntity } from './Signum.Entities.Basics';
 import {
   Type, IType, EntityKind, QueryKey, getQueryNiceName, getQueryKey, isQueryDefined, TypeReference,
   getTypeInfo, tryGetTypeInfos, getEnumInfo, toLuxonFormat, toNumberFormat, PseudoType, EntityData,
-  TypeInfo, PropertyRoute, QueryTokenString, getTypeInfos, tryGetTypeInfo, onReloadTypesActions
+  TypeInfo, PropertyRoute, QueryTokenString, getTypeInfos, tryGetTypeInfo, onReloadTypesActions, Anonymous
 } from './Reflection';
 
 import SearchModal from './SearchControl/SearchModal';
@@ -57,7 +57,7 @@ export function addSettings(...settings: QuerySettings[]) {
   settings.forEach(s => Dic.addOrThrow(querySettings, getQueryKey(s.queryName), s));
 }
 
-export function pinnedSearchFilter<T extends Entity>(type: Type<T>, ...tokens: ((t: QueryTokenString<T>) => (QueryTokenString<any> | FilterConditionOption))[]): FilterGroupOption {
+export function pinnedSearchFilter<T extends Entity>(type: Type<T>, ...tokens: ((t: QueryTokenString<Anonymous<T>>) => (QueryTokenString<any> | FilterConditionOption))[]): FilterGroupOption {
   return {
     groupOperation: "Or",
     pinned: { splitText: true },
@@ -132,7 +132,9 @@ export namespace Options {
 
   export let entityColumnHeader: () => React.ReactChild = () => "";
 
-  export let tokenCanSetPropery = (qt: QueryToken) => qt.filterType == "Lite" && qt.key != "Entity"; 
+  export let tokenCanSetPropery = (qt: QueryToken) => qt.filterType == "Lite" && qt.key != "Entity" || qt.filterType == "Enum" && !isState(qt.type);
+
+  export let isState = (ti: TypeReference) => ti.name.endsWith("State");
 
   export let defaultPagination: Pagination = {
     mode: "Paginate",
@@ -1313,14 +1315,12 @@ export function useInDB<R>(entity: Entity | Lite<Entity> | null, token: QueryTok
   if (resultTable == null)
     return undefined;
 
-  return resultTable.rows[0] && resultTable.rows[0].columns[0] || null;
+  return resultTable.rows[0]?.columns[0] ?? null;
 }
 
 export function useFetchAllLite<T extends Entity>(type: Type<T>, deps?: any[]): Lite<T>[] | undefined {
   return useAPI(() => API.fetchAllLites({ types: type.typeName }), deps ?? []) as Lite<T>[] | undefined;
 }
-
-
 
 export module API {
 
@@ -1398,7 +1398,9 @@ export module API {
 
 
 
-
+function shouldIgnoreValues(pinned?: PinnedFilter | null) {
+  return pinned != null && (pinned.active == "Always" || pinned.active == "WhenHasValue");
+}
 
 export module Encoder {
 
@@ -1426,7 +1428,7 @@ export module Encoder {
       if (isFilterGroupOption(fo)) {
         query["filter" + index + identSuffix] = (fo.token ?? "") + "~" + (fo.groupOperation) + "~" + (ignoreValues ? "" : stringValue(fo.value));
 
-        fo.filters.forEach(f => encodeFilter(f, identation + 1, ignoreValues || Boolean(fo.pinned)));
+        fo.filters.forEach(f => encodeFilter(f, identation + 1, ignoreValues || shouldIgnoreValues(fo.pinned)));
       } else {
         query["filter" + index + identSuffix] = fo.token + "~" + (fo.operation ?? "EqualTo") + "~" + (ignoreValues ? "" : stringValue(fo.value));
       }
@@ -1546,7 +1548,7 @@ export module Decoder {
             groupOperation: FilterGroupOperation.assertDefined(parts[1]),
             value: ignoreValues ? null : unscapeTildes(parts[2]),
             pinned: pinned,
-            filters: toFilterList(gr.elements, identation + 1, ignoreValues || Boolean(pinned)),
+            filters: toFilterList(gr.elements, identation + 1, ignoreValues || shouldIgnoreValues(pinned)),
           }) as FilterGroupOption;
         }
       });
@@ -1689,7 +1691,7 @@ export function getCellFormatter(qs: QuerySettings | undefined, qt: QueryToken, 
 
 export const registeredPropertyFormatters: { [typeAndProperty: string]: CellFormatter } = {};
 
-export function registerPropertyFormatter(pr: PropertyRoute | undefined, formater: CellFormatter) {
+export function registerPropertyFormatter(pr: PropertyRoute | string/*For expressions*/ |undefined, formater: CellFormatter) {
   if (pr == null)
     return;
   registeredPropertyFormatters[pr.toString()] = formater;
@@ -1749,7 +1751,8 @@ export const formatRules: FormatRule[] = [
           ctx.systemTime && ctx.systemTime.mode == "Between" && ctx.systemTime.startDate! < cell ? "date-created" :
             undefined;
 
-        return <bdi className={classes("date", className)}>{DateTime.fromISO(cell).toFormat("yyyy-MM-dd'T'HH:mm:ss")}</bdi>; //To avoid flippig hour and date (L LT) in RTL cultures
+        const luxonFormat = toLuxonFormat(qt.format, qt.type.name as "Date" | "DateTime");
+        return <bdi className={classes("date", className)}>{DateTime.fromISO(cell).toFormatFixed(luxonFormat)}</bdi>; //To avoid flippig hour and date (L LT) in RTL cultures
       });
     }
   },
@@ -1765,7 +1768,8 @@ export const formatRules: FormatRule[] = [
           ctx.systemTime && ctx.systemTime.mode == "Between" && cell < ctx.systemTime.endDate! ? "date-removed" :
             undefined;
 
-        return <bdi className={classes("date", className)}>{DateTime.fromISO(cell).toFormat("yyyy-MM-dd'T'HH:mm:ss")}</bdi>; //To avoid flippig hour and date (L LT) in RTL cultures
+        const luxonFormat = toLuxonFormat(qt.format, qt.type.name as "Date" | "DateTime");
+        return <bdi className={classes("date", className)}>{DateTime.fromISO(cell).toFormat(luxonFormat)}</bdi>; //To avoid flippig hour and date (L LT) in RTL cultures
       });
     }
   },

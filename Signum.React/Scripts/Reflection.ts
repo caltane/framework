@@ -248,7 +248,11 @@ export namespace NumberFormatSettings {
 
 //https://docs.microsoft.com/en-us/dotnet/standard/base-types/standard-numeric-format-strings
 export function toNumberFormat(format: string | undefined, locale?: string): Intl.NumberFormat {
-  return new Intl.NumberFormat(locale ?? NumberFormatSettings.defaultNumberFormatLocale, toNumberFormatOptions(format));
+    let loc = locale ?? NumberFormatSettings.defaultNumberFormatLocale;
+    if (loc.startsWith("es-")) {
+        loc = "de-DE"; //fix problem for Intl formatting "es" numbers for 4 digits over decimal point 
+    }
+  return new Intl.NumberFormat(loc, toNumberFormatOptions(format));
 }
 
 export function toNumberFormatOptions(format: string | undefined): Intl.NumberFormatOptions | undefined {
@@ -310,10 +314,10 @@ export function toNumberFormatOptions(format: string | undefined): Intl.NumberFo
 
   //simple euristic
   var style = f.endsWith("%") ? "percent" : "decimal";
-  var afterDot = f.trimEnd("%").tryAfter(".") ?? "";
+  var afterDot = (f.tryBefore("%") ?? f).tryAfter(".") ?? "";
   const result: Intl.NumberFormatOptions = {
     style: style,
-    minimumFractionDigits: afterDot.trimStart("#").length,
+    minimumFractionDigits: afterDot.replace("#", "").length,
     maximumFractionDigits: afterDot.length,
     useGrouping: f.contains(","),
   };
@@ -996,7 +1000,7 @@ function sameEntity(a: any, b: any) {
 
 export function getFieldMembers(field: string): LambdaMember[] {
   if (field.contains(".")) {
-    var mixinType = field.before(".").trimStart("[").trimEnd("]");
+    var mixinType = field.before(".").after("[").before("]");
     var fieldName = field.after(".");
 
     return [
@@ -1178,6 +1182,11 @@ export function newLite(type: PseudoType, id: number | string, toStr?: string): 
   };
 }
 
+export type Anonymous<T extends ModifiableEntity> = T & {
+  /** Represents the 'Entity' column in the query selector */
+  entity: T
+}
+
 export class Type<T extends ModifiableEntity> implements IType {
 
   New(props?: Partial<T>, propertyRoute?: PropertyRoute): T {
@@ -1314,11 +1323,11 @@ export class Type<T extends ModifiableEntity> implements IType {
 
   /* Constructs a QueryToken able to generate string like "Name" from a strongly typed lambda like a => a.name
    * Note: The QueryToken language is quite different to javascript lambdas (Any, Lites, Nullable, etc)*/
-  token(): QueryTokenString<T & { entity: T}>;
+  token(): QueryTokenString<Anonymous<T>>;
   /** Shortcut for token().append(lambdaToColumn)
    * @param lambdaToColumn lambda expression pointing to a property in the anonymous class of the query. For simple columns comming from properties from the entity.
    */
-  token<S>(lambdaToColumn: (v: T & { entity: T }) => S): QueryTokenString<S>;
+  token<S>(lambdaToColumn: (v: Anonymous<T>) => S): QueryTokenString<S>;
   /** Shortcut for token().expression<S>(columnName)
   * @param columnName property name of some property in the anonymous class of the query. For complex calculated columns that are not a property from the entitiy.
   */
@@ -2064,7 +2073,7 @@ export class GraphExplorer {
 
     const mle = obj as MListElement<any>;
     if (mle.hasOwnProperty && mle.hasOwnProperty("rowId")) {
-      if (this.isModified(mle.element, dot(modelStatePrefix, "element"))) {
+      if (this.isModified(mle.element, modelStatePrefix + ".element")) {
         if (window.exploreGraphDebugMode)
           debugger;
         return true;
@@ -2082,7 +2091,7 @@ export class GraphExplorer {
 
     const lite = obj as Lite<Entity>
     if (lite.EntityType) {
-      if (lite.entity != undefined && this.isModified(lite.entity, dot(modelStatePrefix, "entity"))) {
+      if (lite.entity != undefined && this.isModified(lite.entity, modelStatePrefix + ".entity")) {
         if (window.exploreGraphDebugMode)
           debugger;
         return true;
@@ -2096,7 +2105,7 @@ export class GraphExplorer {
       let result = false;
       for (const p in obj) {
         if (obj.hasOwnProperty == null || obj.hasOwnProperty(p)) {
-          const propertyPrefix = dot(modelStatePrefix, p);
+          const propertyPrefix = modelStatePrefix + "." + p;
           if (this.isModified(obj[p], propertyPrefix)) {
             if (window.exploreGraphDebugMode)
               debugger;
@@ -2111,10 +2120,10 @@ export class GraphExplorer {
     if (this.mode == "collect") {
       if (mod.error != undefined) {
         for (const p in mod.error) {
-          const propertyPrefix = dot(modelStatePrefix, p);
+          const propertyPrefix = modelStatePrefix + "." + p;
 
           if (mod.error[p])
-            this.modelState[dot(modelStatePrefix, p)] = [mod.error[p]];
+            this.modelState[modelStatePrefix + "." + p] = [mod.error[p]];
         }
       }
     }
@@ -2122,7 +2131,7 @@ export class GraphExplorer {
 
       mod.error = undefined;
 
-      const prefix = dot(modelStatePrefix, "");
+      const prefix = modelStatePrefix  + ".";
       for (const key in this.modelState) {
         const propName = key.tryAfter(prefix)
         if (propName && !propName.contains(".")) {
@@ -2148,14 +2157,14 @@ export class GraphExplorer {
       if (obj.hasOwnProperty(p) && !GraphExplorer.specialProperties.contains(p)) {
 
         if (p == "mixins") {
-          const propertyPrefix = dot(modelStatePrefix, p);
+          const propertyPrefix = modelStatePrefix + "." + p;
           if (this.isModifiedMixinDictionary(obj[p], propertyPrefix)) {
             if (window.exploreGraphDebugMode)
               debugger;
             mod.modified = true;
           }
         } else {
-          const propertyPrefix = dot(modelStatePrefix, p);
+          const propertyPrefix = modelStatePrefix + "." + p;
           if (this.isModified(obj[p], propertyPrefix)) {
             if (window.exploreGraphDebugMode)
               debugger;
@@ -2194,12 +2203,5 @@ export class GraphExplorer {
   }
 
   static TypesLazilyCreated: string[] = [];
-}
-
-function dot(prev: string, property: string) {
-  if (prev == undefined || prev == "")
-    return property;
-
-  return prev + "." + property
 }
 
