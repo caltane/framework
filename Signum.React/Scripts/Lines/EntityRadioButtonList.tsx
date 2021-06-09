@@ -148,8 +148,9 @@ export function EntityRadioButtonListSelect(props: EntityRadioButtonListSelectPr
     var groupString = new Date().getTime().toString();
     return fixedData.map((lite, i) =>
       <label className="sf-radiobutton-element" key={i}>
-        <div className={"buttonRadioItem" + (value && is(value as Lite<Entity>, lite) ? " buttonRadioItemChecked" : "")} onClick={e => c.handleOnChange(lite)}>
-          <input type="radio" style={{ marginLeft:"10px" }}
+        <div className={"buttonRadioItem" + (value && is(value as Lite<Entity>, lite) ? " buttonRadioItemChecked" : "") + (p.ctx.readOnly ? " buttonRadiodisabled" : "")}
+          onClick={e => { if (!p.ctx.readOnly) c.handleOnChange(lite); }}>
+          <input type="radio" style={{ marginLeft: "10px" }}
             checked={value && is(value as Lite<Entity>, lite)}
             disabled={p.ctx.readOnly}
             name={"RadioGroup" + groupString} />
